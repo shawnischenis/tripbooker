@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Railpass · Route Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --panel-2: #1d2230;
+    --border: #2a3040;
+    --text: #e7ebf3;
+    --muted: #8892a6;
+    --accent: #6ee7b7;
+    --drive: #64748b;
+    --lyft:  #ec4899;
+    --metro: #ef4444;
+    --bus:   #16a34a;
+    --train: #ea580c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; justify-content: space-between; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  header a:hover { text-decoration: underline; }
+  .layout { display: grid; grid-template-columns: 320px 1fr; height: calc(100% - 53px); }
+  aside { border-right: 1px solid var(--border); overflow-y: auto; padding: 14px; }
+  aside h2 { margin: 0 0 10px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+  .leg { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: border-color 120ms; }
+  .leg:hover { border-color: var(--accent); }
+  .leg .head { display: flex; align-items: center; gap: 8px; }
+  .leg .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .leg .n { color: var(--muted); font-size: 11px; }
+  .leg .route { font-weight: 600; margin-top: 2px; }
+  .leg .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .leg .footer { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; }
+  .leg .price { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .leg .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; color: var(--muted); }
+  .legend-row .swatch { width: 16px; height: 3px; border-radius: 2px; }
+  .total { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: baseline; }
+  .total .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #map { height: 100%; width: 100%; background: #e9eef3; }
+  .leaflet-popup-content-wrapper { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
+  .leaflet-popup-tip { background: var(--panel); }
+  .leaflet-popup-content { margin: 8px 12px; font-size: 12px; }
+  .leaflet-popup-content b { color: var(--accent); }
+  .leaflet-container { font: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Railpass · Route Map</h1>
+    <div class="sub">Rockville, MD → New York, NY · 4 legs</div>
+  </div>
+  <a href="/">← back to planner</a>
+</header>
+<div class="layout">
+  <aside>
+    <h2>Legs</h2>
+    <div id="legs"></div>
+    <div class="legend">
+      <h2>Legend</h2>
+      <div class="legend-row"><div class="swatch" style="background: var(--drive)"></div>Drive</div>
+      <div class="legend-row"><div class="swatch" style="background: var(--lyft)"></div>Lyft</div>
+      <div class="legend-row"><div class="swatch" style="background: var(--metro)"></div>WMATA Metro</div>
+      <div class="legend-row"><div class="swatch" style="background: var(--bus)"></div>FlixBus</div>
+      <div class="legend-row"><div class="swatch" style="background: var(--train)"></div>NJ Transit NEC</div>
+    </div>
+    <div class="total"><span>Total</span><span class="v" id="total">$—</span></div>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+const COLORS = { drive: "#64748b", lyft: "#ec4899", metro: "#ef4444", bus: "#16a34a", train: "#ea580c" };
+
+// Hardcoded geometry for the Rockville → NYC corridor.
+// Leg 3 includes waypoints along I-95 so the polyline follows the actual highway corridor.
+const LEG_GEOMETRY = {
+  1: [[39.0840, -77.1528], [39.1199, -77.1646]],                                                                                          // Rockville → Shady Grove Metro
+  2: [[39.1199, -77.1646], [39.0438, -77.0840], [38.9612, -77.0866], [38.9237, -77.0419], [38.8973, -77.0064]],                            // Shady Grove → Union Station via Red Line
+  3: [[38.8973, -77.0064], [39.2904, -76.6122], [39.6837, -75.7497], [39.7392, -75.5398], [39.9526, -75.1652], [40.2206, -74.7597], [40.7345, -74.1646]],  // Union Station → Baltimore → Wilmington → Philly → Trenton → Newark
+  4: [[40.7345, -74.1646], [40.7506, -73.9935]],                                                                                          // Newark Penn → NYC Penn
+};
+
+const STOPS = [
+  { coord: [39.0840, -77.1528], name: "Rockville, MD",           sub: "Origin",       icon: "A" },
+  { coord: [39.1199, -77.1646], name: "Shady Grove Metro",        sub: "Leg 1 → 2",    icon: "1" },
+  { coord: [38.8973, -77.0064], name: "Union Station DC",         sub: "Leg 2 → 3",    icon: "2" },
+  { coord: [40.7345, -74.1646], name: "Newark Penn Station",      sub: "Leg 3 → 4",    icon: "3" },
+  { coord: [40.7506, -73.9935], name: "New York Penn Station",    sub: "Destination",  icon: "B" },
+];
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function makeMarker(stop) {
+  const isEnd = stop.icon === "A" || stop.icon === "B";
+  const bg = isEnd ? "#6ee7b7" : "#1d2230";
+  const fg = isEnd ? "#0b1f17" : "#e7ebf3";
+  const border = isEnd ? "#6ee7b7" : "#2a3040";
+  const html = `<div style="background:${bg};color:${fg};border:2px solid ${border};border-radius:50%;width:26px;height:26px;display:grid;place-items:center;font:600 12px/1 ui-sans-serif,system-ui;box-shadow:0 2px 6px rgba(0,0,0,.4)">${stop.icon}</div>`;
+  return L.divIcon({ html, className: "", iconSize: [26, 26], iconAnchor: [13, 13] });
+}
+
+const map = L.map("map", { zoomControl: true, attributionControl: true }).setView([39.7, -75.5], 7);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+const legPolylines = {};
+
+function drawLegs(plan) {
+  for (const leg of plan.legs) {
+    const color = COLORS[leg.mode] || "#fff";
+    const coords = LEG_GEOMETRY[leg.n];
+    if (!coords) continue;
+    const dashed = leg.mode === "drive" || leg.mode === "lyft";
+    const poly = L.polyline(coords, {
+      color, weight: 5, opacity: 0.85,
+      dashArray: dashed ? "8 6" : null,
+      lineCap: "round", lineJoin: "round",
+    }).addTo(map);
+    poly.bindPopup(`<b>Leg ${leg.n} · ${leg.operator}</b><br>${leg.from} → ${leg.to}<br>${leg.duration_min} min · $${leg.cost_usd.toFixed(2)}`);
+    legPolylines[leg.n] = poly;
+  }
+
+  for (const stop of STOPS) {
+    L.marker(stop.coord, { icon: makeMarker(stop) })
+      .addTo(map)
+      .bindPopup(`<b>${stop.name}</b><br>${stop.sub}`);
+  }
+
+  const bounds = L.latLngBounds(STOPS.map(s => s.coord));
+  map.fitBounds(bounds, { padding: [40, 40] });
+}
+
+function renderSidebar(plan) {
+  const el = document.getElementById("legs");
+  el.innerHTML = "";
+  for (const leg of plan.legs) {
+    const color = COLORS[leg.mode] || "#fff";
+    const div = document.createElement("div");
+    div.className = "leg";
+    div.innerHTML = `
+      <div class="head">
+        <div class="swatch" style="background:${color}"></div>
+        <span class="n">Leg ${leg.n} · ${leg.mode.toUpperCase()}</span>
+      </div>
+      <div class="route">${leg.from} → ${leg.to}</div>
+      <div class="meta">${leg.operator} · ${leg.duration_min} min</div>
+      <div class="footer">
+        <span class="time">${fmtTime(leg.depart)} → ${fmtTime(leg.arrive)}</span>
+        <span class="price">$${leg.cost_usd.toFixed(2)}</span>
+      </div>`;
+    div.addEventListener("click", () => {
+      const poly = legPolylines[leg.n];
+      if (poly) {
+        map.fitBounds(poly.getBounds(), { padding: [60, 60] });
+        poly.openPopup();
+      }
+    });
+    el.appendChild(div);
+  }
+  document.getElementById("total").textContent = `$${plan.total_usd.toFixed(2)}`;
+}
+
+(async () => {
+  const r = await fetch("/plan", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const plan = await r.json();
+  drawLegs(plan);
+  renderSidebar(plan);
+})();
+</script>
+</body>
+</html>
