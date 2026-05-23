@@ -92,6 +92,15 @@ LEG_LIBRARY: dict[str, dict] = {
 
 # ─── City catalog ────────────────────────────────────────────────────────────
 CITIES: dict[str, dict] = {
+    # Origins are restricted to pairs that produce coherent end-to-end plans
+    # under the current operator stubs:
+    #   - Rockville, DC → use the DC↔NY FlixBus corridor (compare_operators)
+    #   - Princeton, Metuchen, Newark → direct NJT NEC ride (njt_direct)
+    # Philadelphia is excluded for now because the FlixBus stub returns
+    # DC-origin departures regardless of the requested corridor, so the
+    # rendered plan's intercity leg would not match Philly's hub.
+    # Boston as a destination is excluded for the same reason (no operator
+    # stub serves it yet).
     "Rockville, MD": {
         "hub": "Washington Union Station",
         "to_hub_drive":    ["drive:rockville→shadygrove", "metro:shadygrove→union"],
@@ -101,11 +110,6 @@ CITIES: dict[str, dict] = {
         "hub": "Washington Union Station",
         "to_hub_drive":    ["walk:dc→union"],
         "to_hub_no_drive": ["walk:dc→union"],
-    },
-    "Philadelphia, PA": {
-        "hub": "Philadelphia 30th St Station",
-        "to_hub_drive":    ["walk:philadelphia→30th"],
-        "to_hub_no_drive": ["walk:philadelphia→30th"],
     },
     "Princeton, NJ": {
         "hub": "Princeton Junction",
@@ -125,10 +129,6 @@ CITIES: dict[str, dict] = {
     "New York, NY": {
         "hub": "New York Penn Station",
         "from_hub": ["walk:nypenn→nyc"],
-    },
-    "Boston, MA": {
-        "hub": "Boston South Station",
-        "from_hub": ["walk:southstation→boston"],
     },
 }
 

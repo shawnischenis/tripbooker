@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Railpass</title>
+<title>hop</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -85,9 +85,12 @@
   .evidence a.link:hover { text-decoration: underline; }
   .evidence .price-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .evidence .price-strip .chip { background: rgba(110, 231, 183, 0.08); color: var(--accent); border: 1px solid rgba(110, 231, 183, 0.25); padding: 2px 8px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums; }
-  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 100; cursor: zoom-out; padding: 20px; }
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 100; cursor: zoom-out; padding: 40px; }
   .lightbox.show { display: flex; }
-  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; cursor: zoom-out; }
+  .lightbox .close-btn { position: fixed; top: 16px; right: 20px; background: rgba(0,0,0,0.6); color: #fff; border: 1px solid rgba(255,255,255,0.3); width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; font-size: 22px; line-height: 1; padding: 0; z-index: 101; }
+  .lightbox .close-btn:hover { background: rgba(0,0,0,0.85); }
+  .lightbox .hint { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.5); font-size: 11px; letter-spacing: 0.4px; z-index: 101; }
 
   .receipt { margin: 14px 0; }
   .receipt h2 { margin-bottom: 0; }
@@ -180,7 +183,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>Railpass</h1>
+      <h1>hop</h1>
       <div class="sub">Agentic NEC corridor planner · plans, books, and replans multi-leg ground trips</div>
     </div>
     <div class="nav">
@@ -293,7 +296,11 @@
   <pre class="log" id="log">Ready. Edit the origin/destination and hit Plan.</pre>
 </div>
 
-<div class="lightbox" id="lightbox"><img id="lightbox-img" /></div>
+<div class="lightbox" id="lightbox">
+  <button class="close-btn" id="lightbox-close" aria-label="Close">×</button>
+  <img id="lightbox-img" alt="" />
+  <div class="hint">click anywhere or press Esc to close</div>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -633,7 +640,7 @@ function renderReceipt(receipt) {
   $("receipt-totals").innerHTML = `
     <tr><td></td><td colspan="2">Direct pay at-time (you swipe / tap)</td><td class="num">$${t.user_direct.toFixed(2)}</td></tr>
     <tr><td></td><td colspan="2">Reimbursed to agent (bus leg)</td><td class="num">$${t.user_via_agent.toFixed(2)}</td></tr>
-    <tr><td></td><td colspan="2">Railpass agent fee (x402)</td><td class="num">$${t.agent_fee.toFixed(2)}</td></tr>
+    <tr><td></td><td colspan="2">hop agent fee (x402)</td><td class="num">$${t.agent_fee.toFixed(2)}</td></tr>
     <tr class="grand"><td></td><td colspan="2">Grand total</td><td class="num">$${t.grand_total.toFixed(2)}</td></tr>`;
 
   const notes = $("receipt-notes");
@@ -707,9 +714,19 @@ function renderEvidence(out) {
   $("evidence-note").textContent = ev.note || "";
 }
 
-document.getElementById("lightbox").addEventListener("click", () => {
-  document.getElementById("lightbox").classList.remove("show");
-});
+(() => {
+  const lb = document.getElementById("lightbox");
+  const closeLightbox = () => lb.classList.remove("show");
+  // Click anywhere in the overlay (including the image and close button)
+  lb.addEventListener("click", closeLightbox);
+  document.getElementById("lightbox-close").addEventListener("click", (e) => {
+    e.stopPropagation(); closeLightbox();
+  });
+  // Esc to close
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && lb.classList.contains("show")) closeLightbox();
+  });
+})();
 
 async function doBook() {
   if (!currentPlan) { log("Plan first.", "bad"); return; }

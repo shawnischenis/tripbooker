@@ -1,4 +1,4 @@
-"""Railpass orchestrator — FastAPI entry point."""
+"""hop orchestrator — FastAPI entry point."""
 from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Railpass", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="hop", version="0.2.0", lifespan=lifespan)
 
 
 class ReplanRequest(BaseModel):

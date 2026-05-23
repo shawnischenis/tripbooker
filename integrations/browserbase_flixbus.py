@@ -44,6 +44,77 @@ _DEMO_PASSENGER = {
 }
 
 
+async def _dismiss_consent(page, label: str = "?") -> bool:
+    """Aggressively dismiss the Usercentrics GDPR modal. Returns True if a
+    modal was found and dismissed (or if no modal needed dismissing); False
+    only when we tried hard and failed.
+
+    Strategies, in order:
+      1. wait_for_selector for any "Save Choices"-style button up to 8s
+      2. try a battery of CSS locators
+      3. JS shadow-DOM probe + click as fallback
+    """
+    # Step 1: wait for the modal to actually appear. If it never does,
+    # treat it as already-dismissed (some Browserbase sessions inherit cookies).
+    found = False
+    try:
+        await page.wait_for_selector(
+            'button:has-text("Save Choices"), button:has-text("Save choices"), '
+            'button:has-text("Accept All"), button:has-text("Accept all"), '
+            'button:has-text("I Agree"), [data-testid="uc-save-button"]',
+            timeout=8000,
+        )
+        found = True
+    except Exception:
+        return True  # no modal observed within 8s
+
+    # Step 2: CSS locator battery
+    for sel in [
+        'button:has-text("Save Choices")',
+        'button:has-text("Save choices")',
+        'button:has-text("Save my Choices")',
+        'button:has-text("Accept All")',
+        'button:has-text("Accept all")',
+        'button:has-text("Allow all")',
+        'button:has-text("I Agree")',
+        '[data-testid="uc-save-button"]',
+        '[data-testid="uc-accept-all-button"]',
+    ]:
+        with suppress(Exception):
+            await page.locator(sel).first.click(timeout=2500)
+            await page.wait_for_timeout(1500)
+            return True
+
+    # Step 3: JS shadow-DOM fallback
+    with suppress(Exception):
+        clicked = await page.evaluate(
+            """
+            () => {
+                const candidates = ['#usercentrics-root', '#usercentrics-cmp', 'div[id^="usercentrics"]'];
+                for (const sel of candidates) {
+                    const host = document.querySelector(sel);
+                    if (!host) continue;
+                    const root = host.shadowRoot || host;
+                    const buttons = root.querySelectorAll('button');
+                    for (const btn of buttons) {
+                        const text = (btn.innerText || btn.textContent || '').trim();
+                        if (/save|accept|allow|i agree/i.test(text) && !/setting|preference|more/i.test(text)) {
+                            btn.click();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            """
+        )
+        if clicked:
+            await page.wait_for_timeout(1500)
+            return True
+
+    return False
+
+
 def _release_sync(session_id: str) -> None:
     if not (BB_API_KEY and BB_PROJECT_ID):
         return
@@ -107,20 +178,10 @@ async def search_flixbus(
 
             # 1. Deep-link straight to search results
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_timeout(4000)
+            await page.wait_for_timeout(3000)
 
-            # 2. Dismiss the GDPR consent modal
-            consent_dismissed = False
-            for sel in [
-                'button:has-text("Save Choices")',
-                'button:has-text("Accept All")',
-                '[data-testid="uc-save-button"]',
-            ]:
-                with suppress(Exception):
-                    await page.locator(sel).first.click(timeout=4000)
-                    consent_dismissed = True
-                    break
-            await page.wait_for_timeout(1500)
+            # 2. Dismiss the GDPR consent modal (robust shadow-DOM aware)
+            consent_dismissed = await _dismiss_consent(page, "search-page")
             await capture(page, "1_results")
 
             # 3. Click first "Continue" on a departure card
@@ -132,8 +193,10 @@ async def search_flixbus(
                     await continues.first.click(timeout=5000)
                     advanced = True
 
-            # 4. Wait for /checkout to load
-            await page.wait_for_timeout(7000)
+            # 4. Wait for /checkout to load + dismiss any second-pass consent
+            await page.wait_for_timeout(6000)
+            await _dismiss_consent(page, "checkout-page")
+            await page.wait_for_timeout(1000)
             await capture(page, "2_checkout_loaded")
 
             # 5. Fill passenger info — these field IDs are stable on FlixBus

@@ -5,7 +5,7 @@ Three payer categories:
   - user_direct:    pays at-time of travel (parking, metro tap, walk-up train ticket)
   - user_via_agent: the agent prepays with its virtual card, user reimburses
                     via x402 along with the agent fee (currently just the bus leg)
-  - agent_fee:      the railpass service fee, settled via x402 on Base Sepolia
+  - agent_fee:      the hop service fee, settled via x402 on Base Sepolia
 """
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def build_receipt(plan: dict, booking: dict | None, settlement: dict | None) -> 
     if agent_fee:
         items.append({
             "step": len(items) + 1,
-            "operator": "Railpass",
+            "operator": "hop",
             "description": "Agent service fee · x402 micropayment on Base Sepolia",
             "mode": "service",
             "cost_usd": round(agent_fee, 2),
