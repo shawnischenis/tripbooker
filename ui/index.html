@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Railpass</title>
+<title>Hop</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -148,7 +148,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>Railpass</h1>
+      <h1>Hop</h1>
       <div class="sub">Agentic NEC corridor planner · plans, books, and replans multi-leg ground trips</div>
     </div>
     <div class="nav">
@@ -473,7 +473,7 @@ function renderReceipt(receipt) {
   $("receipt-totals").innerHTML = `
     <tr><td></td><td colspan="2">Direct pay at-time (you swipe / tap)</td><td class="num">$${t.user_direct.toFixed(2)}</td></tr>
     <tr><td></td><td colspan="2">Reimbursed to agent (bus leg)</td><td class="num">$${t.user_via_agent.toFixed(2)}</td></tr>
-    <tr><td></td><td colspan="2">Railpass agent fee (x402)</td><td class="num">$${t.agent_fee.toFixed(2)}</td></tr>
+    <tr><td></td><td colspan="2">Hop agent fee (x402)</td><td class="num">$${t.agent_fee.toFixed(2)}</td></tr>
     <tr class="grand"><td></td><td colspan="2">Grand total</td><td class="num">$${t.grand_total.toFixed(2)}</td></tr>`;
 
   const notes = $("receipt-notes");

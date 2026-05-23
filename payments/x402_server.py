@@ -15,7 +15,7 @@ def payment_terms(amount_usd: float = AGENT_FEE_USD) -> dict:
         "asset": "USDC",
         "amount_usd": amount_usd,
         "pay_to": "0xAGENT0000000000000000000000000000000000",
-        "description": "Railpass agent fee — confirmed booking only.",
+        "description": "Hop agent fee — confirmed booking only.",
     }
 
 

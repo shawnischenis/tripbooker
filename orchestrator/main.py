@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Railpass", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Hop", version="0.2.0", lifespan=lifespan)
 
 
 class ReplanRequest(BaseModel):

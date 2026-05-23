@@ -57,7 +57,7 @@ def build_receipt(plan: dict, booking: dict | None, settlement: dict | None) -> 
     if agent_fee:
         items.append({
             "step": len(items) + 1,
-            "operator": "Railpass",
+            "operator": "Hop",
             "description": "Agent service fee · x402 micropayment on Base Sepolia",
             "mode": "service",
             "cost_usd": round(agent_fee, 2),
