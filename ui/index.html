@@ -52,6 +52,64 @@
   .modes .opt-ops { color: var(--muted); font-size: 10px; }
   .modes .opt-reason { color: var(--muted); font-size: 10px; margin-top: 1px; }
 
+  .comparison { margin: 14px 0; }
+  .comparison .summary-bar { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; gap: 12px; flex-wrap: wrap; }
+  .comparison .winner-line { font-weight: 600; font-size: 14px; }
+  .comparison .winner-line .accent { color: var(--accent); }
+  .comparison .reasoning { color: var(--muted); font-size: 12px; }
+  .comparison table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .comparison th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.4px; font-size: 10px; }
+  .comparison td { padding: 7px 8px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  .comparison tr.row { transition: background 100ms; }
+  .comparison tr.row.viable td { color: var(--text); }
+  .comparison tr.row.not td { color: var(--muted); }
+  .comparison tr.row.winner { background: rgba(110, 231, 183, 0.08); }
+  .comparison tr.row.winner td { color: var(--accent); font-weight: 600; }
+  .comparison tr.row.winner td:first-child::before { content: "★ "; }
+  .comparison .reason-cell { color: var(--bad); font-size: 11px; }
+  .comparison tr.row.viable .reason-cell { color: var(--muted); }
+
+  .evidence { margin: 14px 0; }
+  .evidence .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+  .evidence .ref { font-weight: 700; font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--accent); }
+  .evidence .gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+  .evidence .step { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px; overflow: hidden; }
+  .evidence .step .label { color: var(--muted); font-size: 11px; padding: 2px 4px 6px; display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .evidence .step .label .seq { color: var(--accent); font-weight: 600; }
+  .evidence .step .label .url { color: var(--muted); font-size: 10px; font-family: ui-monospace, "SF Mono", Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+  .evidence .step img { display: block; width: 100%; border-radius: 4px; cursor: zoom-in; }
+  .evidence .meta { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .evidence .note { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: 8px; padding: 8px 10px; background: rgba(251, 191, 36, 0.05); border-left: 2px solid var(--warn); border-radius: 3px; }
+  .evidence a.link { color: var(--accent); text-decoration: none; }
+  .evidence a.link:hover { text-decoration: underline; }
+  .evidence .price-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .evidence .price-strip .chip { background: rgba(110, 231, 183, 0.08); color: var(--accent); border: 1px solid rgba(110, 231, 183, 0.25); padding: 2px 8px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 100; cursor: zoom-out; padding: 20px; }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+
+  .receipt { margin: 14px 0; }
+  .receipt h2 { margin-bottom: 0; }
+  .receipt .trip-line { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .receipt table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .receipt th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 8px 6px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.4px; font-size: 10px; }
+  .receipt td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .receipt td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  .receipt td.step { color: var(--muted); width: 24px; font-variant-numeric: tabular-nums; }
+  .receipt .who { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); margin-right: 6px; vertical-align: middle; }
+  .receipt .who.user  { background: rgba(136, 146, 166, 0.10); color: var(--muted); }
+  .receipt .who.agent { background: rgba(110, 231, 183, 0.10); color: var(--accent); border-color: rgba(110, 231, 183, 0.4); }
+  .receipt .who.fee   { background: rgba(167, 139, 250, 0.10); color: var(--openai); border-color: rgba(167, 139, 250, 0.4); }
+  .receipt .desc-line { font-weight: 600; }
+  .receipt .desc-sub  { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .receipt .ref       { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; color: var(--accent); }
+  .receipt tfoot td { padding: 7px 8px; border-bottom: 0; color: var(--muted); }
+  .receipt tfoot tr.grand td { color: var(--text); font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .receipt .notes { margin-top: 10px; font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .receipt .notes li { margin-left: 16px; }
+  .actions .verify-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+  .actions .verify-toggle input { margin: 0; cursor: pointer; }
+
   .legs { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 14px 0; }
   .leg { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; }
   .leg .n { background: var(--panel-2); border: 1px solid var(--border); border-radius: 50%; width: 28px; height: 28px; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -95,11 +153,11 @@
     </div>
     <div class="nav">
       <a href="/map">map view →</a>
-      <span class="sub">Phase 2 · live Nimble + OpenAI reasoning</span>
+      <span class="sub">Phase 3 · multi-operator comparison</span>
     </div>
   </header>
 
-  <div class="phase-banner">Name any two points in the Northeast Corridor (DC → Boston). The agent reasons about viable modes, queries live operators via Nimble, and books the bookable legs.</div>
+  <div class="phase-banner">Name any two points in the Northeast Corridor. The agent reasons about modes, queries 4 intercity operators in parallel (FlixBus, OurBus, Vamoose, Amtrak NER), picks the winner, and books.</div>
 
   <div class="row">
     <div class="panel intent">
@@ -128,6 +186,20 @@
     <div class="segments" id="modes-segments"></div>
   </div>
 
+  <div class="panel comparison" id="comparison-panel" style="display:none">
+    <h2>Intercity operator comparison <span class="sub" id="comparison-meta"></span></h2>
+    <div class="summary-bar">
+      <div class="winner-line" id="comparison-winner"></div>
+      <div class="reasoning" id="comparison-reasoning"></div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Operator</th><th>Depart</th><th>Arrive</th><th>Duration</th><th>Price</th><th>Status</th></tr>
+      </thead>
+      <tbody id="comparison-rows"></tbody>
+    </table>
+  </div>
+
   <div class="legs" id="legs"></div>
 
   <div class="summary">
@@ -138,12 +210,43 @@
   <div class="actions">
     <button id="btn-plan">Plan</button>
     <button id="btn-book" class="primary">Book</button>
+    <label class="verify-toggle" title="Also drive a real headless Chromium session (adds ~60s)">
+      <input type="checkbox" id="verify-toggle" />verify in real browser
+    </label>
     <input id="replan-input" type="text" placeholder="I can't drive to Shady Grove anymore" />
     <button id="btn-replan">Replan</button>
   </div>
 
+  <div class="panel receipt" id="receipt-panel" style="display:none">
+    <h2>Receipt</h2>
+    <div class="trip-line" id="receipt-trip"></div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Step</th><th>Payment method</th><th style="text-align:right">Amount</th></tr>
+      </thead>
+      <tbody id="receipt-rows"></tbody>
+      <tfoot id="receipt-totals"></tfoot>
+    </table>
+    <ul class="notes" id="receipt-notes"></ul>
+  </div>
+
+  <div class="panel evidence" id="evidence-panel" style="display:none">
+    <h2>Booking · real Chromium session via Browserbase</h2>
+    <div class="head">
+      <div>Operator: <span id="evidence-operator"></span> · Ref: <span class="ref" id="evidence-ref"></span></div>
+      <div class="meta" id="evidence-meta"></div>
+    </div>
+    <div class="meta">Final URL: <a class="link" id="evidence-link" target="_blank"></a></div>
+    <div class="meta" id="evidence-debug-line" style="display:none">Live debug: <a class="link" id="evidence-debug" target="_blank">browserbase session →</a></div>
+    <div class="price-strip" id="evidence-prices"></div>
+    <div class="gallery" id="evidence-gallery"></div>
+    <div class="note" id="evidence-note"></div>
+  </div>
+
   <pre class="log" id="log">Ready. Edit the origin/destination and hit Plan.</pre>
 </div>
+
+<div class="lightbox" id="lightbox"><img id="lightbox-img" /></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -227,10 +330,54 @@ function renderIntentSummary(intent) {
     `Arrive by ${fmtTime(intent.arrive_by)} · budget $${intent.max_budget_usd.toFixed(2)}${cons}`;
 }
 
+function renderComparison(comp) {
+  const panel = $("comparison-panel");
+  if (!comp) { panel.style.display = "none"; return; }
+  panel.style.display = "block";
+
+  $("comparison-meta").textContent =
+    `${comp.n_operators_queried} operators · ${comp.n_viable}/${comp.candidates.length} viable · ranked by ${comp.criterion} · ${comp.elapsed_ms}ms`;
+
+  if (comp.winner) {
+    const w = comp.winner;
+    $("comparison-winner").innerHTML =
+      `Winner: <span class="accent">${w.operator}</span> $${w.price_usd.toFixed(2)} · ${fmtTime(w.depart)} → ${fmtTime(w.arrive)} · ${w.duration_min}min`;
+  } else {
+    $("comparison-winner").innerHTML = `<span class="bad">No viable operator</span>`;
+  }
+  $("comparison-reasoning").textContent = comp.reasoning || "";
+
+  const sorted = comp.candidates.slice().sort((a, b) => {
+    // viable first, then by ranking criterion
+    if (a.viable !== b.viable) return a.viable ? -1 : 1;
+    return comp.criterion === "speed"
+      ? a.duration_min - b.duration_min
+      : a.price_usd - b.price_usd;
+  });
+
+  const rows = $("comparison-rows");
+  rows.innerHTML = "";
+  const winnerId = comp.winner ? comp.winner.departure_id : null;
+  for (const c of sorted) {
+    const tr = document.createElement("tr");
+    const isWinner = c.departure_id === winnerId;
+    tr.className = `row ${c.viable ? "viable" : "not"}${isWinner ? " winner" : ""}`;
+    tr.innerHTML = `
+      <td>${c.operator}</td>
+      <td>${fmtTime(c.depart)}</td>
+      <td>${fmtTime(c.arrive)}</td>
+      <td>${c.duration_min}min</td>
+      <td>$${c.price_usd.toFixed(2)}</td>
+      <td class="reason-cell">${c.viable ? "✓" : c.reason}</td>`;
+    rows.appendChild(tr);
+  }
+}
+
 function render(plan) {
   currentPlan = plan;
   renderIntentSummary(plan.intent);
   renderModes(plan.modes);
+  renderComparison(plan.intercity_comparison);
 
   const legsEl = $("legs");
   legsEl.innerHTML = "";
@@ -293,19 +440,152 @@ async function doReplan() {
   log(`Δ total ${out.delta_usd >= 0 ? "+" : ""}$${out.delta_usd.toFixed(2)}`);
 }
 
+function renderReceipt(receipt) {
+  const panel = $("receipt-panel");
+  if (!receipt) { panel.style.display = "none"; return; }
+  panel.style.display = "block";
+  $("receipt-trip").textContent = `${receipt.trip} · ${receipt.depart_date}`;
+
+  const rows = $("receipt-rows");
+  rows.innerHTML = "";
+  for (const item of receipt.items) {
+    const tr = document.createElement("tr");
+    const whoCls = item.payer === "user" ? "user"
+                : item.payer === "agent" ? "agent" : "fee";
+    const sub = [
+      item.duration_min ? `${item.duration_min} min` : null,
+      item.booking_reference ? `<span class="ref">${item.booking_reference}</span>` : null,
+      item.tx_hash ? `<span class="ref">${item.tx_hash.slice(0,14)}…</span>` : null,
+      item.status,
+    ].filter(Boolean).join(" · ");
+    tr.innerHTML = `
+      <td class="step">${item.step}</td>
+      <td>
+        <div class="desc-line"><span class="who ${whoCls}">${item.payer}</span>${item.description}</div>
+        <div class="desc-sub">${item.operator}${sub ? " · " + sub : ""}</div>
+      </td>
+      <td>${item.payment_method}</td>
+      <td class="num">$${item.cost_usd.toFixed(2)}</td>`;
+    rows.appendChild(tr);
+  }
+
+  const t = receipt.totals;
+  $("receipt-totals").innerHTML = `
+    <tr><td></td><td colspan="2">Direct pay at-time (you swipe / tap)</td><td class="num">$${t.user_direct.toFixed(2)}</td></tr>
+    <tr><td></td><td colspan="2">Reimbursed to agent (bus leg)</td><td class="num">$${t.user_via_agent.toFixed(2)}</td></tr>
+    <tr><td></td><td colspan="2">Railpass agent fee (x402)</td><td class="num">$${t.agent_fee.toFixed(2)}</td></tr>
+    <tr class="grand"><td></td><td colspan="2">Grand total</td><td class="num">$${t.grand_total.toFixed(2)}</td></tr>`;
+
+  const notes = $("receipt-notes");
+  notes.innerHTML = "";
+  for (const n of (receipt.notes || [])) {
+    const li = document.createElement("li");
+    li.textContent = n;
+    notes.appendChild(li);
+  }
+}
+
+function renderEvidence(out) {
+  const panel = $("evidence-panel");
+  const ev = out.browserbase_evidence;
+  if (!ev || !ev.ok) { panel.style.display = "none"; return; }
+  panel.style.display = "block";
+  $("evidence-operator").textContent = out.operator;
+  $("evidence-ref").textContent = out.booking?.booking_reference || "—";
+  const sid = (ev.session_id || "").slice(0, 8);
+  const summary = [
+    `session ${sid}…`,
+    ev.consent_dismissed ? "consent ✓" : "consent ✗",
+    ev.submitted ? "submitted ✓" : "submitted ✗",
+    `${ev.steps?.length || 0} screenshots`,
+  ].join(" · ");
+  $("evidence-meta").textContent = summary;
+
+  const link = $("evidence-link");
+  link.href = ev.final_url || "#";
+  link.textContent = (ev.final_url || "").slice(0, 100) + ((ev.final_url || "").length > 100 ? "…" : "");
+
+  const dbgLine = $("evidence-debug-line");
+  if (ev.debug_url) {
+    dbgLine.style.display = "block";
+    $("evidence-debug").href = ev.debug_url;
+  } else {
+    dbgLine.style.display = "none";
+  }
+
+  // Real-price chips from results page
+  const priceStrip = $("evidence-prices");
+  priceStrip.innerHTML = "";
+  (ev.prices_found || []).slice(0, 12).forEach(p => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = `$${p.toFixed(2)}`;
+    priceStrip.appendChild(chip);
+  });
+
+  // Step gallery
+  const gallery = $("evidence-gallery");
+  gallery.innerHTML = "";
+  (ev.steps || []).forEach((step, i) => {
+    if (!step.screenshot_b64) return;
+    const card = document.createElement("div");
+    card.className = "step";
+    const niceName = step.name.replace(/^\d+_/, "").replace(/_/g, " ");
+    card.innerHTML = `
+      <div class="label">
+        <span><span class="seq">${i + 1}.</span> ${niceName}</span>
+        <span class="url" title="${step.url}">${(step.url || "").replace(/^https?:\/\//, "")}</span>
+      </div>
+      <img src="data:image/png;base64,${step.screenshot_b64}" alt="${step.name}" />`;
+    card.querySelector("img").addEventListener("click", () => {
+      $("lightbox-img").src = `data:image/png;base64,${step.screenshot_b64}`;
+      $("lightbox").classList.add("show");
+    });
+    gallery.appendChild(card);
+  });
+
+  $("evidence-note").textContent = ev.note || "";
+}
+
+document.getElementById("lightbox").addEventListener("click", () => {
+  document.getElementById("lightbox").classList.remove("show");
+});
+
 async function doBook() {
   if (!currentPlan) { log("Plan first.", "bad"); return; }
-  log("→ POST /book");
-  const r = await fetch("/book", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ plan: currentPlan })
-  });
-  const out = await r.json();
-  if (!out.ok) { log(out.error || "Booking failed", "bad"); return; }
-  log(`booking ref: ${out.booking.booking_reference} (status: ${out.booking.status})`, "ok");
-  log(`x402 settlement tx ${out.settlement.tx_hash}`);
-  await refreshWallet();
+  const verify = $("verify-toggle").checked;
+  const btn = $("btn-book");
+  btn.disabled = true; const origText = btn.textContent;
+  btn.textContent = verify ? "Booking + verifying…" : "Booking…";
+  log(`→ POST /book${verify ? " (with browser verify)" : ""}`);
+  try {
+    const r = await fetch("/book", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ plan: currentPlan, verify })
+    });
+    const out = await r.json();
+    if (!out.ok) { log(out.error || "Booking failed", "bad"); return; }
+
+    renderReceipt(out.receipt);
+
+    log(`booking ref: ${out.booking.booking_reference} (status: ${out.booking.status})`, "ok");
+    log(`x402 settlement tx ${out.settlement.tx_hash}`);
+    if (out.receipt) {
+      log(`receipt total: $${out.receipt.totals.grand_total.toFixed(2)} (user direct $${out.receipt.totals.user_direct.toFixed(2)} + reimburse $${out.receipt.totals.user_via_agent.toFixed(2)} + fee $${out.receipt.totals.agent_fee.toFixed(2)})`, "ok");
+    }
+    const ev = out.browserbase_evidence;
+    if (ev?.ok) {
+      log(`Browserbase session ${ev.session_id?.slice(0,8)}: consent=${ev.consent_dismissed} reached_checkout=${ev.reached_checkout_page}`, "ok");
+      if (ev.total_amount_usd) log(`live FlixBus total: $${ev.total_amount_usd.toFixed(2)}`, "ok");
+    } else if (ev) {
+      log(`Browserbase failed: ${ev.error}`, "bad");
+    }
+    renderEvidence(out);
+    await refreshWallet();
+  } finally {
+    btn.disabled = false; btn.textContent = origText;
+  }
 }
 
 $("btn-plan").addEventListener("click", doPlan);

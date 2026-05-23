@@ -15,7 +15,8 @@ from __future__ import annotations
 import asyncio
 from orchestrator.intent import Intent
 from orchestrator.modes import select_modes
-from integrations import nimble_lyft, nimble_flixbus, wmata, njt, clickhouse_client
+from orchestrator.operators import compare_intercity
+from integrations import nimble_lyft, wmata, njt, clickhouse_client
 
 
 async def _leg1_drive() -> dict:
@@ -78,37 +79,69 @@ async def _leg2() -> dict:
     }
 
 
-async def _leg3() -> dict:
-    options = nimble_flixbus.find_departures()
-    chosen = options[1]
-    # Log every departure quote we see so the corridor price-history chart
-    # accumulates over time. Stub for now; Phase 3 swaps in live Nimble pricing.
+_BUS_OPERATORS = {"FlixBus", "OurBus", "Vamoose"}
+
+
+async def _leg3(intent: Intent) -> tuple[dict, dict]:
+    """Returns (leg_dict, intercity_comparison_dict).
+
+    Calls 4 operators in parallel, picks the winner per intent constraints,
+    logs every candidate's price to ClickHouse for the corridor chart.
+    """
+    comparison = await compare_intercity(intent)
+    winner = comparison["winner"]
+
     await clickhouse_client.record_prices([
         {
-            "corridor": "WAS-EWR",
-            "operator": opt["operator"],
-            "mode": "bus",
-            "price_usd": opt["price_usd"],
-            "depart": opt["depart"],
+            "corridor": "WAS-NYC",
+            "operator": c["operator"],
+            "mode": "bus" if c["operator"] in _BUS_OPERATORS else "train",
+            "price_usd": c["price_usd"],
+            "depart": c["depart"],
             "source": "stub",
         }
-        for opt in options
+        for c in comparison["candidates"]
     ])
-    return {
+
+    if winner is None:
+        # No candidates at all — surface a placeholder so the rest of the
+        # plan still renders. The UI will show the comparison panel with
+        # the empty state.
+        return ({
+            "n": 3,
+            "from": "—",
+            "to": "—",
+            "mode": "bus",
+            "operator": "—",
+            "depart": intent.arrive_by.isoformat(),
+            "arrive": intent.arrive_by.isoformat(),
+            "duration_min": 0,
+            "cost_usd": 0.0,
+            "bookable": False,
+            "detail": "No intercity operator returned a candidate.",
+            "source": "static",
+        }, comparison)
+
+    leg = {
         "n": 3,
-        "from": "Washington DC Union Station",
-        "to": "Newark Penn Station",
-        "mode": "bus",
-        "operator": chosen["operator"],
-        "depart": chosen["depart"],
-        "arrive": chosen["arrive"],
-        "duration_min": chosen["duration_min"],
-        "cost_usd": chosen["price_usd"],
-        "bookable": True,
-        "departure_id": chosen["departure_id"],
-        "detail": f"{chosen['seats_left']} seats left · this is the real booking",
+        "from": winner["origin"],
+        "to": winner["destination"],
+        "mode": "bus" if winner["operator"] in _BUS_OPERATORS else "train",
+        "operator": winner["operator"],
+        "depart": winner["depart"],
+        "arrive": winner["arrive"],
+        "duration_min": winner["duration_min"],
+        "cost_usd": winner["price_usd"],
+        "bookable": winner["operator"] != "Amtrak NER",  # Amtrak booking is GDS-gated
+        "departure_id": winner["departure_id"],
+        "detail": (
+            f"{winner.get('seats_left', 0)} seats left · "
+            f"winner of {comparison['n_operators_queried']}-operator comparison "
+            f"({comparison['n_viable']} viable)"
+        ),
         "source": "static",
     }
+    return leg, comparison
 
 
 async def _leg4() -> dict:
@@ -138,20 +171,23 @@ async def _leg4() -> dict:
 async def plan(intent: Intent) -> dict:
     no_drive = "no_drive" in intent.constraints
     leg1 = _leg1_lyft() if no_drive else _leg1_drive()
-    modes, *legs = await asyncio.gather(
+    modes, l1, l2, leg3_pair, l4 = await asyncio.gather(
         select_modes(intent),
         leg1,
         _leg2(),
-        _leg3(),
+        _leg3(intent),
         _leg4(),
     )
+    leg3, intercity_comparison = leg3_pair
+    legs = [l1, l2, leg3, l4]
     total = round(sum(leg["cost_usd"] for leg in legs), 2)
     return {
         "intent": intent.model_dump(mode="json"),
         "modes": modes,
+        "intercity_comparison": intercity_comparison,
         "legs": legs,
         "total_usd": total,
         "predicted_arrival": legs[-1]["arrive"],
         "within_budget": total <= intent.max_budget_usd,
-        "phase": 2,
+        "phase": 3,
     }

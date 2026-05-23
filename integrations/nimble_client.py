@@ -26,8 +26,10 @@ async def extract(
     render: bool = True,
     formats: list[str] | None = None,
     render_options: dict | None = None,
+    browser_actions: list[dict] | None = None,
     country: str = "US",
     timeout: float = DEFAULT_TIMEOUT,
+    **extra: object,
 ) -> dict:
     if not NIMBLE_API_KEY:
         raise NimbleError("NIMBLE_API_KEY not set in environment")
@@ -40,6 +42,9 @@ async def extract(
     }
     if render_options:
         payload["render_options"] = render_options
+    if browser_actions:
+        payload["browser_actions"] = browser_actions
+    payload.update(extra)
 
     headers = {
         "Authorization": f"Bearer {NIMBLE_API_KEY}",
