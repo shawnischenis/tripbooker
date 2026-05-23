@@ -20,7 +20,7 @@ from integrations import nimble_flixbus, ourbus, vamoose, amtrak
 _OTHER_LEGS_RESERVE_USD = 15.0
 
 
-def _evaluate(dep: dict, intent: Intent) -> dict:
+def _evaluate(dep: dict, intent: Intent, earliest_depart: datetime | None = None) -> dict:
     """Annotate a departure with viability flags + reason."""
     intercity_budget = intent.max_budget_usd - _OTHER_LEGS_RESERVE_USD
     over_budget = dep["price_usd"] > intercity_budget
@@ -30,14 +30,21 @@ def _evaluate(dep: dict, intent: Intent) -> dict:
     except (ValueError, TypeError):
         too_late = False
 
-    viable = not over_budget and not too_late
+    too_early = False
+    if earliest_depart:
+        try:
+            too_early = datetime.fromisoformat(dep["depart"]) < earliest_depart
+        except (ValueError, TypeError):
+            pass
+
+    viable = not over_budget and not too_late and not too_early
     reasons = []
     if over_budget:
-        reasons.append(
-            f"${dep['price_usd']:.2f} exceeds intercity budget ${intercity_budget:.2f}"
-        )
+        reasons.append(f"${dep['price_usd']:.2f} exceeds intercity budget ${intercity_budget:.2f}")
     if too_late:
         reasons.append(f"arrives after {intent.arrive_by.isoformat()}")
+    if too_early:
+        reasons.append(f"departs before {earliest_depart.strftime('%H:%M')} (Metro arrival + walk)")
     return {**dep, "viable": viable, "reason": "; ".join(reasons) or "viable"}
 
 
@@ -48,7 +55,7 @@ async def _query(module, intent: Intent) -> list[dict]:
     return await asyncio.to_thread(module.find_departures)
 
 
-async def compare_intercity(intent: Intent) -> dict:
+async def compare_intercity(intent: Intent, earliest_depart: datetime | None = None) -> dict:
     t0 = time.monotonic()
     raw = await asyncio.gather(
         _query(nimble_flixbus, intent),
@@ -64,7 +71,7 @@ async def compare_intercity(intent: Intent) -> dict:
         if isinstance(r, Exception) or not r:
             continue
         for dep in r:
-            candidates.append(_evaluate(dep, intent))
+            candidates.append(_evaluate(dep, intent, earliest_depart))
 
     criterion = "speed" if "fast" in intent.constraints else "cost"
     viable = [c for c in candidates if c["viable"]]

@@ -110,6 +110,37 @@
   .actions .verify-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
   .actions .verify-toggle input { margin: 0; cursor: pointer; }
 
+  .cascade { margin: 14px 0; }
+  .cascade h2 .badge { font-size: 10px; padding: 1px 8px; border-radius: 999px; margin-left: 8px; font-variant: small-caps; letter-spacing: 0.5px; }
+  .cascade h2 .badge.ok    { background: rgba(110, 231, 183, 0.12); color: var(--accent); border: 1px solid rgba(110, 231, 183, 0.4); }
+  .cascade h2 .badge.miss  { background: rgba(248, 113, 113, 0.12); color: var(--bad);    border: 1px solid rgba(248, 113, 113, 0.4); }
+  .cascade .summary { color: var(--text); font-size: 13px; margin: 10px 0 14px; padding: 9px 12px; background: var(--panel-2); border-left: 3px solid var(--accent); border-radius: 3px; line-height: 1.5; }
+  .cascade .summary.miss { border-left-color: var(--bad); }
+  .cascade .timeline { display: flex; flex-direction: column; gap: 2px; }
+  .cascade .step { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; }
+  .cascade .step.ok    { border-color: rgba(110, 231, 183, 0.3); }
+  .cascade .step.tight { border-color: rgba(251, 191, 36, 0.4); }
+  .cascade .step.miss  { border-color: rgba(248, 113, 113, 0.5); background: rgba(248, 113, 113, 0.04); }
+  .cascade .icon { font-size: 16px; text-align: center; }
+  .cascade .step.ok .icon    { color: var(--accent); }
+  .cascade .step.tight .icon { color: var(--warn); }
+  .cascade .step.miss .icon  { color: var(--bad); }
+  .cascade .step .desc { font-size: 13px; }
+  .cascade .step .desc-sub { color: var(--muted); font-size: 11px; margin-top: 2px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .cascade .step .desc-sub .actual { color: var(--warn); }
+  .cascade .step .slack { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cascade .step.ok .slack   { color: var(--accent); }
+  .cascade .step.tight .slack{ color: var(--warn); }
+  .cascade .step.miss .slack { color: var(--bad); }
+
+  .rebook { margin-top: 14px; }
+  .rebook h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin: 0 0 8px; }
+  .rebook table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .rebook th { text-align: left; color: var(--muted); font-weight: 500; padding: 5px 8px; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .rebook td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  .rebook td.warn { color: var(--warn); font-size: 11px; }
+  .senso-cite { margin-top: 8px; font-size: 11px; color: var(--muted); padding: 6px 10px; background: rgba(167, 139, 250, 0.06); border-left: 2px solid var(--openai); border-radius: 3px; }
+
   .legs { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 14px 0; }
   .leg { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; }
   .leg .n { background: var(--panel-2); border: 1px solid var(--border); border-radius: 50%; width: 28px; height: 28px; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -198,6 +229,20 @@
       </thead>
       <tbody id="comparison-rows"></tbody>
     </table>
+  </div>
+
+  <div class="panel cascade" id="cascade-panel" style="display:none">
+    <h2>Replan cascade <span id="cascade-badge" class="badge ok">catchable</span></h2>
+    <div class="summary" id="cascade-summary"></div>
+    <div class="timeline" id="cascade-timeline"></div>
+    <div class="rebook" id="cascade-rebook" style="display:none">
+      <h3>Rebook options</h3>
+      <table>
+        <thead><tr><th>Operator</th><th>Departure</th><th>Arrival</th><th>Delay</th><th>Δ Fare</th><th></th></tr></thead>
+        <tbody id="cascade-rebook-rows"></tbody>
+      </table>
+      <div class="senso-cite" id="cascade-senso"></div>
+    </div>
   </div>
 
   <div class="legs" id="legs"></div>
@@ -373,6 +418,86 @@ function renderComparison(comp) {
   }
 }
 
+function renderCascade(cascade) {
+  const panel = $("cascade-panel");
+  if (!cascade) { panel.style.display = "none"; return; }
+  panel.style.display = "block";
+
+  const catchable = cascade.bookable_catchable;
+  const badge = $("cascade-badge");
+  badge.className = "badge " + (catchable ? "ok" : "miss");
+  badge.textContent = catchable
+    ? `FlixBus catchable`
+    : `FlixBus miss by ${cascade.miss_by_min} min`;
+
+  const sum = $("cascade-summary");
+  sum.textContent = cascade.summary;
+  sum.className = "summary" + (catchable ? "" : " miss");
+
+  const tl = $("cascade-timeline");
+  tl.innerHTML = "";
+  for (const t of cascade.transitions) {
+    const div = document.createElement("div");
+    let cls = "ok";
+    if (!t.feasible) cls = "miss";
+    else if (t.tight) cls = "tight";
+    div.className = `step ${cls}`;
+    const icon = cls === "ok" ? "✓" : (cls === "tight" ? "⚠" : "✗");
+
+    const schedLine = `sched arr ${t.scheduled_arrive?.slice(11,16)} → dep ${t.scheduled_depart?.slice(11,16)}`;
+    let actualLine = "";
+    const shifted = t.actual_depart && t.actual_depart !== t.scheduled_depart;
+    if (t.actual_arrive !== t.scheduled_arrive || shifted) {
+      const aArr = t.actual_arrive?.slice(11,16) ?? "—";
+      const aDep = t.actual_depart?.slice(11,16) ?? "MISSED";
+      actualLine = `<span class="actual">actual arr ${aArr} → dep ${aDep}${t.recovery_note ? ' · ' + t.recovery_note : ''}</span>`;
+    }
+
+    const walk = t.walk_buffer_min ? ` (+${t.walk_buffer_min}min walk)` : "";
+    const slackText = t.slack_min == null
+      ? "—"
+      : (t.slack_min >= 0 ? `+${t.slack_min}m` : `${t.slack_min}m`);
+
+    div.innerHTML = `
+      <div class="icon">${icon}</div>
+      <div>
+        <div class="desc">leg ${t.from_leg} → leg ${t.to_leg}${walk}</div>
+        <div class="desc-sub">${schedLine}${actualLine ? '<br>' + actualLine : ''}</div>
+      </div>
+      <div class="slack">${slackText}</div>`;
+    tl.appendChild(div);
+  }
+
+  // Rebook options
+  const rebook = $("cascade-rebook");
+  if (cascade.rebook_required && cascade.rebook_options?.length) {
+    rebook.style.display = "block";
+    const rows = $("cascade-rebook-rows");
+    rows.innerHTML = "";
+    for (const o of cascade.rebook_options) {
+      const tr = document.createElement("tr");
+      const overrun = o.violates_arrive_by
+        ? `<td class="warn">+${o.arrival_overrun_min} min past arrive-by</td>`
+        : `<td></td>`;
+      const dlt = (o.extra_cost_vs_planned_usd >= 0 ? '+' : '−') + '$' + Math.abs(o.extra_cost_vs_planned_usd).toFixed(2);
+      tr.innerHTML = `
+        <td>${o.operator}</td>
+        <td>${o.depart.slice(11,16)}</td>
+        <td>${o.arrive.slice(11,16)}</td>
+        <td>+${o.delay_vs_planned_min} min</td>
+        <td>${dlt}</td>
+        ${overrun}`;
+      rows.appendChild(tr);
+    }
+    const senso = cascade.senso_policy;
+    $("cascade-senso").innerHTML = senso
+      ? `<b>Senso:</b> ${senso.answer} <span style="opacity:0.7">— ${senso.citation}</span>`
+      : "";
+  } else {
+    rebook.style.display = "none";
+  }
+}
+
 function render(plan) {
   currentPlan = plan;
   renderIntentSummary(plan.intent);
@@ -421,6 +546,7 @@ async function doPlan() {
   });
   const p = await r.json();
   render(p);
+  renderCascade(null);  // /plan has no cascade — only /replan does
   if (p.modes) log(`agent picked: ${p.modes.recommended_chain}`, "ok");
   log(`← plan ready (${p.legs.length} legs, $${p.total_usd.toFixed(2)})`, "ok");
 }
@@ -436,7 +562,8 @@ async function doReplan() {
   });
   const out = await r.json();
   render(out.new_plan);
-  log(out.explanation, "ok");
+  renderCascade(out.cascade);
+  log(out.explanation, out.cascade?.bookable_catchable ? "ok" : "bad");
   log(`Δ total ${out.delta_usd >= 0 ? "+" : ""}$${out.delta_usd.toFixed(2)}`);
 }
 

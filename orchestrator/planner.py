@@ -88,7 +88,11 @@ async def _leg3(intent: Intent) -> tuple[dict, dict]:
     Calls 4 operators in parallel, picks the winner per intent constraints,
     logs every candidate's price to ClickHouse for the corridor chart.
     """
-    comparison = await compare_intercity(intent)
+    # Leg 2 (Metro) arrives Union Station 10:45; +5 min walk to bus deck.
+    # Hardcoded for the demo since leg 2's schedule is fixed.
+    from datetime import datetime as _dt
+    earliest = _dt.fromisoformat("2026-05-25T10:50:00")
+    comparison = await compare_intercity(intent, earliest_depart=earliest)
     winner = comparison["winner"]
 
     await clickhouse_client.record_prices([
