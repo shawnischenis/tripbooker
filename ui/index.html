@@ -29,9 +29,10 @@
   .intent { flex: 1; min-width: 320px; }
   .intent .form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .intent .form .full { grid-column: 1 / -1; }
-  .intent input { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 7px; font: inherit; min-width: 0; }
+  .intent input, .intent select { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 7px; font: inherit; min-width: 0; }
   .intent input::placeholder { color: var(--muted); }
-  .intent input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .intent input:focus, .intent select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .intent .hub-line { color: var(--muted); font-size: 11px; margin-top: 4px; font-style: italic; }
   .intent .summary-line { color: var(--muted); font-size: 12px; margin-top: 8px; }
   .wallet { min-width: 280px; }
   .wallet .balances { display: flex; gap: 18px; }
@@ -194,11 +195,12 @@
     <div class="panel intent">
       <h2>Trip</h2>
       <div class="form">
-        <input id="input-origin" type="text" placeholder="Origin (e.g. Rockville, MD)" value="Rockville, MD" />
-        <input id="input-dest"   type="text" placeholder="Destination (e.g. New York, NY)" value="New York, NY" />
+        <select id="input-origin"></select>
+        <select id="input-dest"></select>
         <input id="input-budget" type="number" placeholder="Budget $" value="80" step="1" min="1" />
         <input id="input-arrive" type="datetime-local" value="2026-05-25T16:00" />
       </div>
+      <div id="route-hubs" class="hub-line"></div>
       <div id="intent-summary" class="summary-line"></div>
     </div>
     <div class="panel wallet">
@@ -330,12 +332,43 @@ function srcBadge(source, error) {
 
 function readIntent() {
   return {
-    origin: $("input-origin").value.trim() || "Rockville, MD",
-    destination: $("input-dest").value.trim() || "New York, NY",
+    origin: $("input-origin").value || "Rockville, MD",
+    destination: $("input-dest").value || "New York, NY",
     max_budget_usd: parseFloat($("input-budget").value) || 80,
     arrive_by: ($("input-arrive").value || "2026-05-25T16:00") + ":00",
     constraints: [],
   };
+}
+
+async function populateCities() {
+  const r = await fetch("/cities");
+  const data = await r.json();
+  const o = $("input-origin");
+  const d = $("input-dest");
+  for (const city of data.origins) {
+    const opt = document.createElement("option");
+    opt.value = city.name; opt.textContent = `${city.name}  ·  ${city.hub}`;
+    if (city.name === "Rockville, MD") opt.selected = true;
+    o.appendChild(opt);
+  }
+  for (const city of data.destinations) {
+    const opt = document.createElement("option");
+    opt.value = city.name; opt.textContent = `${city.name}  ·  ${city.hub}`;
+    if (city.name === "New York, NY") opt.selected = true;
+    d.appendChild(opt);
+  }
+  updateHubLine();
+  o.addEventListener("change", updateHubLine);
+  d.addEventListener("change", updateHubLine);
+}
+
+function updateHubLine() {
+  const oOpt = $("input-origin").selectedOptions[0];
+  const dOpt = $("input-dest").selectedOptions[0];
+  if (!oOpt || !dOpt) return;
+  const oHub = oOpt.textContent.split("  ·  ")[1] || "";
+  const dHub = dOpt.textContent.split("  ·  ")[1] || "";
+  $("route-hubs").textContent = `route: ${oHub} → ${dHub}`;
 }
 
 function renderModes(modes) {
@@ -720,6 +753,7 @@ $("btn-replan").addEventListener("click", doReplan);
 $("btn-book").addEventListener("click", doBook);
 
 (async () => {
+  await populateCities();
   await refreshWallet();
   await doPlan();
 })();

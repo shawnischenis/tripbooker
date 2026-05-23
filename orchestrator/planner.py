@@ -1,197 +1,253 @@
-"""Builds the multi-leg NEC corridor plan.
+"""O/D-aware multi-leg planner — Phase C.
 
 Pipeline:
-  1. Mode-selection reasoning (OpenAI) — decides which transport modes are
-     viable for first/last mile and intercity given the intent's budget and
-     constraints. Runs BEFORE any operator call.
-  2. Operator queries (Nimble) for the live legs — WMATA, NJT, Lyft. The bus
-     leg stays stubbed in Phase 2; Phase 3 will parallelize multiple operators.
-  3. Itinerary assembly with the selected operators.
+  1. Look up origin + destination in the catalog. Route through corridor.py
+     to determine strategy (same_hub | njt_direct | compare_operators).
+  2. Build the leg template sequence: first-mile + intercity + last-mile.
+  3. Run mode-selection reasoning (OpenAI) in parallel with operator queries.
+  4. Schedule legs backward from intent.arrive_by — each leg's depart/arrive
+     is computed from its duration plus a transfer buffer.
+  5. Log all bus quotes to ClickHouse; emit the final plan dict.
 
-Mode selection runs in parallel with the operator calls — both have similar
-latency so we hide the OpenAI cost.
+The legacy hardcoded Rockville→NYC plan is one specific path through this
+pipeline; everything else (Metuchen→NYC single-leg, DC→NYC three-leg, etc.)
+falls out for free.
 """
 from __future__ import annotations
 import asyncio
+from datetime import datetime, timedelta
 from orchestrator.intent import Intent
 from orchestrator.modes import select_modes
+from orchestrator.catalog import LEG_LIBRARY, get_leg
+from orchestrator.corridor import plan_route
 from orchestrator.operators import compare_intercity
-from integrations import nimble_lyft, wmata, njt, clickhouse_client
+from integrations import wmata, njt, nimble_lyft, clickhouse_client
 
-
-async def _leg1_drive() -> dict:
-    return {
-        "n": 1,
-        "from": "Rockville, MD",
-        "to": "Shady Grove Metro",
-        "mode": "drive",
-        "operator": "Self-drive",
-        "depart": "2026-05-25T09:42:00",
-        "arrive": "2026-05-25T10:00:00",
-        "duration_min": 18,
-        "cost_usd": 5.00,
-        "bookable": False,
-        "detail": "Park at Shady Grove garage · $5 day rate",
-        "source": "static",
-    }
-
-
-async def _leg1_lyft() -> dict:
-    est = await nimble_lyft.estimate("Rockville, MD", "Shady Grove Metro")
-    return {
-        "n": 1,
-        "from": "Rockville, MD",
-        "to": "Shady Grove Metro",
-        "mode": "lyft",
-        "operator": est["service"],
-        "depart": "2026-05-25T09:35:00",
-        "arrive": "2026-05-25T09:57:00",
-        "duration_min": est["duration_min"],
-        "cost_usd": est["cost_usd"],
-        "bookable": False,
-        "detail": f"ETA pickup {est['eta_pickup_min']} min · surge {est['surge_multiplier']}x",
-        "swap_reason": "Driver opted out; live Lyft estimate.",
-        "source": est.get("source", "cached"),
-    }
-
-
-async def _leg2() -> dict:
-    t = await wmata.trip("Shady Grove", "Union Station")
-    arrivals = t.get("next_trains_min", [])
-    detail = (
-        f"Next trains to Glenmont: {', '.join(str(m) + 'm' for m in arrivals[:3])} · tap-to-pay"
-        if arrivals
-        else "tap-to-pay"
-    )
-    return {
-        "n": 2,
-        "from": "Shady Grove",
-        "to": "Union Station",
-        "mode": "metro",
-        "operator": f"WMATA {t['line']} Line",
-        "depart": "2026-05-25T10:07:00",
-        "arrive": "2026-05-25T10:45:00",
-        "duration_min": t["duration_min"],
-        "cost_usd": t["fare_usd"],
-        "bookable": False,
-        "detail": detail,
-        "source": t.get("source", "cached"),
-    }
-
-
+# Minimum buffer at any non-bookable platform transfer
+_TRANSFER_BUFFER_MIN = 5
+# Extra buffer before stepping onto a bookable intercity vehicle
+_BOOKABLE_BOARDING_BUFFER_MIN = 10
 _BUS_OPERATORS = {"FlixBus", "OurBus", "Vamoose"}
 
 
-async def _leg3(intent: Intent) -> tuple[dict, dict]:
-    """Returns (leg_dict, intercity_comparison_dict).
+def _schedule_backward(templates: list[dict], arrive_by: datetime) -> list[dict]:
+    """Assign depart/arrive to each leg, working backward from arrive_by.
+    Bookable legs get a larger boarding buffer in front of them."""
+    legs = []
+    current = arrive_by
+    for tpl in reversed(templates):
+        dur = tpl.get("duration_min", 0)
+        leg = {**tpl}
+        leg["arrive"] = current.isoformat()
+        depart_dt = current - timedelta(minutes=dur)
+        leg["depart"] = depart_dt.isoformat()
+        legs.append(leg)
+        buffer = _BOOKABLE_BOARDING_BUFFER_MIN if tpl.get("bookable") else _TRANSFER_BUFFER_MIN
+        current = depart_dt - timedelta(minutes=buffer)
+    legs.reverse()
+    for i, leg in enumerate(legs, start=1):
+        leg["n"] = i
+        leg.setdefault("source", "static")
+    return legs
 
-    Calls 4 operators in parallel, picks the winner per intent constraints,
-    logs every candidate's price to ClickHouse for the corridor chart.
-    """
-    # Leg 2 (Metro) arrives Union Station 10:45; +5 min walk to bus deck.
-    # Hardcoded for the demo since leg 2's schedule is fixed.
-    from datetime import datetime as _dt
-    earliest = _dt.fromisoformat("2026-05-25T10:50:00")
+
+# ─── per-strategy leg builders ──────────────────────────────────────────────
+async def _build_legs_njt_direct(route: dict, intent: Intent) -> tuple[list[dict], dict | None]:
+    """Single NJT NEC ride between two on-line hubs (e.g. Metuchen → NY Penn)."""
+    o_hub, d_hub = route["origin_hub"], route["destination_hub"]
+    fare_info = await njt.northeast_corridor(o_hub, d_hub)
+
+    # Mint an intercity NJT leg template on the fly using the live fare lookup.
+    njt_leg = {
+        "from": o_hub, "to": d_hub,
+        "mode": "train",
+        "operator": f"{fare_info['operator']} {fare_info['line']}",
+        "duration_min": fare_info["duration_min"],
+        "cost_usd": fare_info["fare_usd"],
+        "bookable": False,
+        "detail": f"Next departures: {', '.join(fare_info.get('next_departures', [])[:3])} · walk-up fare",
+        "source": fare_info.get("source", "cached"),
+    }
+
+    templates = (
+        [get_leg(k) for k in route["to_hub_keys"]]
+        + [njt_leg]
+        + [get_leg(k) for k in route["from_hub_keys"]]
+    )
+    return templates, None
+
+
+async def _build_legs_compare_operators(route: dict, intent: Intent) -> tuple[list[dict], dict]:
+    """First-mile + intercity (bus/train compared) + (optional bridge) + last-mile."""
+    o_hub, d_hub = route["origin_hub"], route["destination_hub"]
+
+    # Earliest intercity departure depends on how long the first-mile takes.
+    first_mile_total = sum(LEG_LIBRARY[k]["duration_min"] for k in route["to_hub_keys"])
+    # Earliest is "as late as possible given arrive_by minus everything after intercity"
+    # but for the comparison filter we just need a sane lower bound — anchor on the demo's
+    # 10:50 (Metro arrival + walk) which is the legacy reference.
+    earliest = datetime.fromisoformat("2026-05-25T10:50:00")
     comparison = await compare_intercity(intent, earliest_depart=earliest)
     winner = comparison["winner"]
 
+    # Log all candidates to CH
     await clickhouse_client.record_prices([
-        {
-            "corridor": "WAS-NYC",
-            "operator": c["operator"],
-            "mode": "bus" if c["operator"] in _BUS_OPERATORS else "train",
-            "price_usd": c["price_usd"],
-            "depart": c["depart"],
-            "source": "stub",
-        }
+        {"corridor": f"{o_hub[:3]}-{d_hub[:3]}", "operator": c["operator"],
+         "mode": "bus" if c["operator"] in _BUS_OPERATORS else "train",
+         "price_usd": c["price_usd"], "depart": c["depart"], "source": "stub"}
         for c in comparison["candidates"]
     ])
 
     if winner is None:
-        # No candidates at all — surface a placeholder so the rest of the
-        # plan still renders. The UI will show the comparison panel with
-        # the empty state.
-        return ({
-            "n": 3,
-            "from": "—",
-            "to": "—",
-            "mode": "bus",
-            "operator": "—",
-            "depart": intent.arrive_by.isoformat(),
-            "arrive": intent.arrive_by.isoformat(),
-            "duration_min": 0,
-            "cost_usd": 0.0,
-            "bookable": False,
-            "detail": "No intercity operator returned a candidate.",
-            "source": "static",
-        }, comparison)
+        # Fallback: empty intercity placeholder so the rest renders
+        intercity_legs = [{
+            "from": o_hub, "to": d_hub, "mode": "bus", "operator": "—",
+            "duration_min": 0, "cost_usd": 0.0, "bookable": False,
+            "detail": "No intercity option returned.",
+        }]
+    else:
+        intercity_leg = {
+            "from": winner["origin"], "to": winner["destination"],
+            "mode": "bus" if winner["operator"] in _BUS_OPERATORS else "train",
+            "operator": winner["operator"],
+            "duration_min": winner["duration_min"],
+            "cost_usd": winner["price_usd"],
+            "bookable": winner["operator"] != "Amtrak NER",
+            "departure_id": winner["departure_id"],
+            "detail": (
+                f"{winner.get('seats_left', 0)} seats left · "
+                f"winner of {comparison['n_operators_queried']}-operator comparison "
+                f"({comparison['n_viable']} viable)"
+            ),
+        }
 
-    leg = {
-        "n": 3,
-        "from": winner["origin"],
-        "to": winner["destination"],
-        "mode": "bus" if winner["operator"] in _BUS_OPERATORS else "train",
-        "operator": winner["operator"],
-        "depart": winner["depart"],
-        "arrive": winner["arrive"],
-        "duration_min": winner["duration_min"],
-        "cost_usd": winner["price_usd"],
-        "bookable": winner["operator"] != "Amtrak NER",  # Amtrak booking is GDS-gated
-        "departure_id": winner["departure_id"],
-        "detail": (
-            f"{winner.get('seats_left', 0)} seats left · "
-            f"winner of {comparison['n_operators_queried']}-operator comparison "
-            f"({comparison['n_viable']} viable)"
-        ),
-        "source": "static",
-    }
-    return leg, comparison
+        intercity_legs = [intercity_leg]
 
+        # Bridge leg if the intercity drops us at a different hub than dest_hub.
+        # For the DC→NY case, FlixBus terminates at Newark Penn while destination
+        # hub is NY Penn → add an NJT NEC bridge.
+        if winner["destination"] != d_hub:
+            bridge = await njt.northeast_corridor(winner["destination"], d_hub)
+            intercity_legs.append({
+                "from": winner["destination"], "to": d_hub,
+                "mode": "train",
+                "operator": f"{bridge['operator']} {bridge['line']}",
+                "duration_min": bridge["duration_min"],
+                "cost_usd": bridge["fare_usd"],
+                "bookable": False,
+                "detail": f"Next departures: {', '.join(bridge.get('next_departures', [])[:3])} · walk-up fare",
+                "source": bridge.get("source", "cached"),
+            })
 
-async def _leg4() -> dict:
-    nec = await njt.northeast_corridor()
-    deps = nec.get("next_departures", [])
-    detail = (
-        f"Next NEC departures from Newark: {', '.join(deps[:3])} · walk-up fare"
-        if deps
-        else "Walk-up fare"
+    templates = (
+        [get_leg(k) for k in route["to_hub_keys"]]
+        + intercity_legs
+        + [get_leg(k) for k in route["from_hub_keys"]]
     )
-    return {
-        "n": 4,
-        "from": "Newark Penn Station",
-        "to": "New York Penn Station",
-        "mode": "train",
-        "operator": f"{nec['operator']} {nec['line']}",
-        "depart": "2026-05-25T15:36:00",
-        "arrive": "2026-05-25T15:54:00",
-        "duration_min": nec["duration_min"],
-        "cost_usd": nec["fare_usd"],
-        "bookable": False,
-        "detail": detail,
-        "source": nec.get("source", "cached"),
-    }
+    return templates, comparison
 
 
+async def _build_legs_same_hub(route: dict, intent: Intent) -> tuple[list[dict], None]:
+    """Just first-mile + last-mile, no intercity. Edge case."""
+    templates = (
+        [get_leg(k) for k in route["to_hub_keys"]]
+        + [get_leg(k) for k in route["from_hub_keys"]]
+    )
+    return templates, None
+
+
+# ─── Lyft live-estimate substitution (when no_drive flips first-mile to lyft) ──
+async def _apply_lyft_live(legs: list[dict]) -> list[dict]:
+    """If any leg has mode=lyft, swap its cost/duration with a live estimate."""
+    if not any(l.get("mode") == "lyft" for l in legs):
+        return legs
+    est = await nimble_lyft.estimate()
+    out = []
+    for l in legs:
+        if l.get("mode") == "lyft":
+            l = {**l, "cost_usd": est["cost_usd"], "duration_min": est["duration_min"],
+                 "detail": f"ETA pickup {est['eta_pickup_min']} min · surge {est['surge_multiplier']}x",
+                 "source": est.get("source", "cached")}
+            if est.get("error"):
+                l["error"] = est["error"]
+        out.append(l)
+    return out
+
+
+async def _apply_metro_live(legs: list[dict]) -> list[dict]:
+    """Refresh metro leg detail string with live WMATA arrivals (if present)."""
+    if not any(l.get("mode") == "metro" for l in legs):
+        return legs
+    info = await wmata.trip()
+    out = []
+    for l in legs:
+        if l.get("mode") == "metro":
+            arrivals = info.get("next_trains_min", [])
+            detail = (
+                f"Next trains to Glenmont: {', '.join(str(m) + 'm' for m in arrivals[:3])} · tap-to-pay"
+                if arrivals else l.get("detail", "tap-to-pay")
+            )
+            l = {**l, "detail": detail, "source": info.get("source", "cached")}
+        out.append(l)
+    return out
+
+
+# ─── Top-level entry point ──────────────────────────────────────────────────
 async def plan(intent: Intent) -> dict:
     no_drive = "no_drive" in intent.constraints
-    leg1 = _leg1_lyft() if no_drive else _leg1_drive()
-    modes, l1, l2, leg3_pair, l4 = await asyncio.gather(
-        select_modes(intent),
-        leg1,
-        _leg2(),
-        _leg3(intent),
-        _leg4(),
+    route = plan_route(intent.origin, intent.destination, no_drive)
+
+    if not route["valid"]:
+        return {
+            "intent": intent.model_dump(mode="json"),
+            "error": route["reason"],
+            "legs": [],
+            "total_usd": 0.0,
+            "within_budget": True,
+            "predicted_arrival": intent.arrive_by.isoformat(),
+            "modes": None,
+            "intercity_comparison": None,
+            "phase": "C",
+        }
+
+    # Strategy dispatch (intercity work happens in parallel with mode reasoning)
+    if route["strategy"] == "njt_direct":
+        leg_task = _build_legs_njt_direct(route, intent)
+    elif route["strategy"] == "compare_operators":
+        leg_task = _build_legs_compare_operators(route, intent)
+    else:
+        leg_task = _build_legs_same_hub(route, intent)
+
+    route_hint = {
+        "origin_hub": route["origin_hub"],
+        "destination_hub": route["destination_hub"],
+        "strategy": route["strategy"],
+    }
+    modes, (templates, comparison) = await asyncio.gather(
+        select_modes(intent, route_hint),
+        leg_task,
     )
-    leg3, intercity_comparison = leg3_pair
-    legs = [l1, l2, leg3, l4]
-    total = round(sum(leg["cost_usd"] for leg in legs), 2)
+
+    # Substitute live data on legs that have a corresponding integration
+    templates = await _apply_lyft_live(templates)
+    templates = await _apply_metro_live(templates)
+
+    legs = _schedule_backward(templates, intent.arrive_by)
+    total = round(sum(l["cost_usd"] for l in legs), 2)
+
     return {
         "intent": intent.model_dump(mode="json"),
+        "route": {
+            "strategy": route["strategy"],
+            "origin_hub": route["origin_hub"],
+            "destination_hub": route["destination_hub"],
+            "leg_count": len(legs),
+        },
         "modes": modes,
-        "intercity_comparison": intercity_comparison,
+        "intercity_comparison": comparison,
         "legs": legs,
         "total_usd": total,
-        "predicted_arrival": legs[-1]["arrive"],
+        "predicted_arrival": legs[-1]["arrive"] if legs else intent.arrive_by.isoformat(),
         "within_budget": total <= intent.max_budget_usd,
-        "phase": 3,
+        "phase": "C",
     }

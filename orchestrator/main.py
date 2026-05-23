@@ -11,6 +11,7 @@ from orchestrator.intent import Intent, parse
 from orchestrator.planner import plan
 from orchestrator.replan import replan
 from orchestrator.receipt import build_receipt
+from orchestrator.catalog import supported_origins, supported_destinations, CITIES
 import asyncio
 from integrations import nimble_flixbus, ourbus, vamoose, amtrak, clickhouse_client
 from integrations import nimble_flixbus_checkout, browserbase_flixbus
@@ -134,6 +135,15 @@ async def book_endpoint(req: BookRequest) -> dict:
 @app.get("/wallet")
 def wallet_endpoint() -> dict:
     return cdp_wallet.balances()
+
+
+@app.get("/cities")
+def cities_endpoint() -> dict:
+    """Catalog of supported origins + destinations + their NEC hubs."""
+    return {
+        "origins":      [{"name": n, "hub": CITIES[n]["hub"]} for n in supported_origins()],
+        "destinations": [{"name": n, "hub": CITIES[n]["hub"]} for n in supported_destinations()],
+    }
 
 
 @app.get("/metrics")

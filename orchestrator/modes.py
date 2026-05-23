@@ -37,7 +37,18 @@ For each segment, ALWAYS list ALL candidate modes — including the ones that ar
 
 For intercity, ALWAYS include at least one operator name in the operators[] array. Known NEC operators:
 - bus: FlixBus, OurBus, Vamoose, Greyhound, Megabus
-- train: Amtrak Northeast Regional (cheaper), Amtrak Acela (faster, premium)
+- train: Amtrak Northeast Regional (cheaper), Amtrak Acela (faster, premium), NJ Transit Northeast Corridor (commuter rail, cheapest, NJ↔NYC only)
+
+CRITICAL: Some O/D pairs are BOTH on the NJ Transit Northeast Corridor line
+(stations: Trenton, Princeton Junction, Metuchen, Newark Penn, NY Penn). For
+those trips the "intercity" leg is a single NJT NEC commuter-rail ride — there
+is NO bus alternative, NO intercity transfer, and NO meaningful first-mile
+to a separate hub. When you receive a "Route analysis" line with
+strategy=njt_direct, mark only NJT NEC as viable intercity (operators:
+["NJ Transit Northeast Corridor"]), explicitly mark bus as viable=false with
+reason "no bus operator runs this short commuter corridor", and treat
+first_mile as the short walk/drive to the local NEC station (NOT a separate
+hub like Union Station).
 
 Constraint vocabulary:
 - no_drive: user has no access to their own car. Lyft is still fine (someone else drives). Only the "drive" mode becomes infeasible.
@@ -105,16 +116,34 @@ def _fallback(intent: Intent) -> dict:
     }
 
 
-async def select_modes(intent: Intent) -> dict:
+async def select_modes(intent: Intent, route_hint: dict | None = None) -> dict:
     if _client is None:
         result = _fallback(intent)
     else:
+        hint_lines = ""
+        if route_hint:
+            hint_lines = (
+                f"Route analysis: origin_hub={route_hint.get('origin_hub')}, "
+                f"destination_hub={route_hint.get('destination_hub')}, "
+                f"strategy={route_hint.get('strategy')}.\n"
+            )
+            if route_hint.get("strategy") == "njt_direct":
+                hint_lines += (
+                    "Both hubs are on the NJ Transit Northeast Corridor line. The intercity leg "
+                    "is a single ~50min NJT commuter rail ride at ~$15. There is NO bus alternative "
+                    "for this short corridor. The first_mile is a short walk to the local NEC station "
+                    "(not a transfer to a separate hub). Last_mile is a short walk from the arrival station.\n"
+                )
+            elif route_hint.get("strategy") == "same_hub":
+                hint_lines += "Origin and destination share a hub — no intercity leg needed.\n"
+
         user_msg = (
             f"Origin: {intent.origin}\n"
             f"Destination: {intent.destination}\n"
             f"Max budget: ${intent.max_budget_usd:.2f} (per passenger, one-way, total across all legs)\n"
             f"Arrive by: {intent.arrive_by.isoformat()}\n"
-            f"Constraints: {', '.join(intent.constraints) if intent.constraints else 'none'}\n\n"
+            f"Constraints: {', '.join(intent.constraints) if intent.constraints else 'none'}\n"
+            f"{hint_lines}\n"
             "Output the mode-selection JSON now."
         )
         try:
